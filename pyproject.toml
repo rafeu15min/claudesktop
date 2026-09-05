@@ -1,0 +1,18 @@
+[project]
+name = "claudesktop"
+version = "0.1.0"
+description = "MCP server: screen-aware mouse/keyboard control for Hyprland via grim + ydotool"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+claudesktop = "claudesktop.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claudesktop"]
