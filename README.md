@@ -74,10 +74,15 @@ uv run claudesktop panic
 ```
 
 Para o `ydotoold` na hora (via systemd), independente do estado do servidor MCP
-— funciona mesmo que uma chamada de ferramenta esteja travada. Pendente:
-vincular isso a um atalho de teclado no Hyprland (`bind = ..., exec, ...`) —
-ainda não fiz porque mexe no seu `hyprland.lua`, e isso eu confirmo com você
-antes de tocar.
+— funciona mesmo que uma chamada de ferramenta esteja travada.
+
+Atalhos globais no Hyprland (`~/.config/hypr/hyprland.lua`):
+
+- `SUPER + SHIFT + P` → `claudesktop panic` (desliga o `ydotoold`)
+- `SUPER + P` → religa o `ydotoold` (`systemctl --user restart ydotool.service`)
+
+O powermenu (wlogout), que antes estava em `SUPER + P`, foi movido para
+`SUPER + X` para abrir espaço para esses dois.
 
 ## Prioridade do usuário físico
 
