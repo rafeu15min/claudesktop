@@ -22,3 +22,21 @@
   bruto na conversa; se algo capturado parecer senha/segredo (texto logo após
   um prompt de senha/sudo/login), sinalizar que algo sensível foi percebido em
   vez de reproduzir o valor — mesmo que a resposta fique menos completa.
+- **Ordem de preferência de ferramenta (2026-09-05/06):** pra qualquer coisa
+  dentro de um app GTK/Qt nativo, usar `atspi_*` antes de `click`/`screenshot`
+  às cegas; pra qualquer coisa dentro de uma página em navegador Chromium,
+  usar `browser_*` antes disso. Print+clique continua existindo e é o método
+  certo pra jogos/conteúdo puramente visual (canvas sem estrutura nenhuma pra
+  consultar) — não é "menos bom", é a ferramenta certa pra outra categoria de
+  alvo. Não usar o print+clique por padrão só porque é o caminho mais antigo
+  do projeto.
+- **AT-SPI é D-Bus puro via `jeepney`, não PyGObject.** `gi.repository.Atspi`
+  funciona no Python do sistema (3.14) mas não no venv do `uv` (3.13) — ABI de
+  extensão compilada incompatível, `--system-site-packages` não resolve. Não
+  tentar "consertar" isso trocando pra PyGObject sem antes alinhar a versão do
+  Python do projeto com a do sistema (e mesmo assim, isso reintroduziria uma
+  dependência de sistema pesada que o `jeepney` evita).
+- Cobertura do AT-SPI é parcial por natureza, não um bug a corrigir: Chromium/
+  Vivaldi e apps que renderizam tudo num canvas (Alacritty, jogos) nunca vão
+  aparecer em `atspi_apps()` — isso é esperado, não sinal de que o módulo está
+  quebrado.

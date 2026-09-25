@@ -8,7 +8,7 @@ import shutil
 import socket
 from pathlib import Path
 
-from . import hyprctl
+from . import atspi, hyprctl
 
 
 def _ydotoold_reachable() -> bool:
@@ -37,9 +37,17 @@ def check_environment() -> dict:
             hyprctl_ok = True
         except hyprctl.HyprctlError:
             hyprctl_ok = False
+    atspi_bus_ok = False
+    try:
+        conn = atspi.connect()
+        conn.close()
+        atspi_bus_ok = True
+    except atspi.AtspiError:
+        atspi_bus_ok = False
     return {
         "ydotoold_reachable": _ydotoold_reachable(),
         "grim_ok": shutil.which("grim") is not None,
         "hyprctl_ok": hyprctl_ok,
         "uinput_writable": uinput.exists() and os.access(uinput, os.W_OK),
+        "atspi_bus_reachable": atspi_bus_ok,
     }

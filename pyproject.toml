@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "MCP server: screen-aware mouse/keyboard control for Hyprland via grim + ydotool"
 requires-python = ">=3.11"
 dependencies = [
+    "jeepney>=0.9.0",
     "mcp>=1.0.0",
+    "websockets>=17.1",
 ]
 
 [project.scripts]
