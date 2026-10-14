@@ -37,6 +37,10 @@ def active_window() -> dict | None:
     return data or None
 
 
+def keyboards() -> list[dict]:
+    return json.loads(_run("devices", "-j"))["keyboards"]
+
+
 def cursor_pos() -> tuple[int, int]:
     raw = _run("cursorpos").strip()
     x_str, y_str = raw.split(",")

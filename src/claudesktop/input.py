@@ -21,6 +21,8 @@ from __future__ import annotations
 import subprocess
 import time
 
+from . import keymap
+
 BUTTON_CODES = {"left": 0x00, "right": 0x01, "middle": 0x02}
 
 # Raw Linux keycodes (see /usr/include/linux/input-event-codes.h) — only what
@@ -80,7 +82,18 @@ def scroll(dx: int = 0, dy: int = 0) -> None:
 
 
 def type_text(text: str) -> None:
-    _run("type", "--", text)
+    """Types via raw keycodes resolved against the layout Hyprland applies to the
+    virtual device (see keymap.py) — not `ydotool type`, which assumes US and
+    turned `/ : ;` into other symbols on ABNT2."""
+    chunk: list[str] = []
+    for code, mods in keymap.strokes_for(text):
+        chunk += [f"{m}:1" for m in mods] + [f"{code}:1", f"{code}:0"] + [f"{m}:0" for m in reversed(mods)]
+        # Split only between strokes (all keys released) so argv stays bounded on long text.
+        if len(chunk) >= 200:  # ~12ms per event in ydotool -> well under _run's 5s timeout
+            _run("key", *chunk)
+            chunk = []
+    if chunk:
+        _run("key", *chunk)
 
 
 def send_keys(combo: str) -> None:

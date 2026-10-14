@@ -40,3 +40,9 @@
   Vivaldi e apps que renderizam tudo num canvas (Alacritty, jogos) nunca vão
   aparecer em `atspi_apps()` — isso é esperado, não sinal de que o módulo está
   quebrado.
+- **`type_text` nunca altera o layout do sistema** (2026-10-14). Ele não usa
+  `ydotool type` (que assume US e trocava `/ : ;` no ABNT2): `keymap.py` lê o
+  layout que o Hyprland aplica ao `ydotoold-virtual-device`, compila o mesmo
+  keymap com libxkbcommon (ctypes, sem extensão compilada) e manda keycodes +
+  Shift/AltGr via `ydotool key`. Forçar `kb_layout=us` no device virtual e o
+  `wtype` foram descartados porque mexem no teclado físico do usuário.
