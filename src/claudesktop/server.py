@@ -12,7 +12,7 @@ from mcp.server.mcpserver import Image, MCPServer
 
 import time
 
-from . import atspi, cdp, geometry, hyprctl, screenshot
+from . import atspi, audio, cdp, geometry, hyprctl, screenshot
 from . import input as ydinput
 from .doctor import check_environment as _check_environment
 
@@ -177,6 +177,14 @@ def wait_for(
         time.sleep(interval_s)
         found = check()
     return [{"found": found, "elapsed_s": round(time.monotonic() - start, 2)}, _after_action_screenshot(shot)]
+
+
+@mcp.tool()
+def audio_level(seconds: float = 2.0) -> dict:
+    """Record `seconds` of what the default output device is playing and report peak/RMS in
+    dBFS, sound_detected (peak above ~-70 dBFS), and the apps with an audio stream (muted /
+    paused flags). Read-only — use it to check whether a game or app is really producing sound."""
+    return audio.level(seconds)
 
 
 @mcp.tool()
