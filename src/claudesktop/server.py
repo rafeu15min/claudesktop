@@ -12,7 +12,7 @@ from mcp.server.mcpserver import Image, MCPServer
 
 import time
 
-from . import atspi, audio, cdp, geometry, hyprctl, screenshot
+from . import atspi, audio, cdp, gamepad, geometry, hyprctl, screenshot
 from . import input as ydinput
 from .doctor import check_environment as _check_environment
 
@@ -191,6 +191,44 @@ def audio_level(seconds: float = 2.0) -> dict:
 def check_environment() -> dict:
     """Read-only diagnostics: confirms ydotoold/grim/hyprctl/uinput are all working. Never mutates anything."""
     return _check_environment()
+
+
+# --- Virtual gamepad: Xbox 360 identity via uinput, for games without good kb/mouse support --
+
+
+@mcp.tool()
+def gamepad_connect() -> dict:
+    """Plug in a virtual Xbox 360 controller (stays connected until gamepad_disconnect or the
+    server exits). Connect BEFORE launching a game — many only detect pads present at start."""
+    return gamepad.connect()
+
+
+@mcp.tool()
+def gamepad_disconnect() -> dict:
+    """Unplug the virtual controller."""
+    return gamepad.disconnect()
+
+
+@mcp.tool()
+def gamepad_press(button: str, hold_ms: int = 100, shot: str = "full") -> list:
+    """Press and release a controller button: a b x y lb rb back start guide ls rs, or the
+    d-pad: up down left right."""
+    gamepad.press(button, hold_ms)
+    return [{"pressed": button, "hold_ms": hold_ms}, _after_action_screenshot(shot)]
+
+
+@mcp.tool()
+def gamepad_stick(stick: str, x: float, y: float, hold_ms: int = 300, shot: str = "full") -> list:
+    """Tilt the left/right stick to x, y in [-1, 1] (y positive = up) for hold_ms, then recenter."""
+    gamepad.stick(stick, x, y, hold_ms)
+    return [{"stick": stick, "x": x, "y": y, "hold_ms": hold_ms}, _after_action_screenshot(shot)]
+
+
+@mcp.tool()
+def gamepad_trigger(side: str, value: float = 1.0, hold_ms: int = 200, shot: str = "full") -> list:
+    """Pull the left/right trigger to value in [0, 1] for hold_ms, then release."""
+    gamepad.trigger(side, value, hold_ms)
+    return [{"trigger": side, "value": value, "hold_ms": hold_ms}, _after_action_screenshot(shot)]
 
 
 # --- AT-SPI: structured element lookup for native GTK/Qt apps ------------------------
