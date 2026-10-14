@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from mcp.server.mcpserver import Image, MCPServer
 
+import time
+
 from . import atspi, cdp, geometry, hyprctl, screenshot
 from . import input as ydinput
 from .doctor import check_environment as _check_environment
@@ -17,8 +19,31 @@ from .doctor import check_environment as _check_environment
 mcp = MCPServer("claudesktop")
 
 
-def _after_action_screenshot() -> Image:
-    return Image(data=screenshot.capture_fullscreen(), format="png")
+def _after_action_screenshot(shot: str = "full") -> Image:
+    """shot="full" (default, required by project rules) | "window" (active window only)
+    | "small" (fullscreen at half scale) — the cheaper ones are opt-in per call."""
+    if shot == "full":
+        data = screenshot.capture_fullscreen()
+    elif shot == "small":
+        data = screenshot.capture_scaled(0.5)
+    elif shot == "window":
+        win = hyprctl.active_window()
+        if win is None:
+            data = screenshot.capture_fullscreen()
+        else:
+            (x, y), (w, h) = win["at"], win["size"]
+            data = screenshot.capture_region(x, y, w, h)
+    else:
+        raise ValueError(f"unknown shot {shot!r}, expected 'full', 'window' or 'small'")
+    return Image(data=data, format="png")
+
+
+def _ensure_keyboard_allowed(on_lock_screen: bool) -> None:
+    if ydinput.screen_locked() and not on_lock_screen:
+        raise RuntimeError(
+            "screen is locked (hyprlock): keystrokes would go to its password field. "
+            "Only if the user told you to type the password, call again with on_lock_screen=true."
+        )
 
 
 @mcp.tool()
@@ -41,7 +66,7 @@ def take_screenshot(monitor: str | None = None, region: list[int] | None = None)
 
 
 @mcp.tool()
-def move_mouse(x: int, y: int, monitor: str | None = None) -> list:
+def move_mouse(x: int, y: int, monitor: str | None = None, shot: str = "full") -> list:
     """Move the cursor to absolute coordinates. If `monitor` is given, x/y are local to that monitor."""
     if monitor is not None:
         mon = next((m for m in hyprctl.monitors() if m["name"] == monitor), None)
@@ -49,48 +74,109 @@ def move_mouse(x: int, y: int, monitor: str | None = None) -> list:
             raise ValueError(f"unknown monitor {monitor!r}")
         x, y = geometry.monitor_local_to_global(x, y, mon)
     ydinput.move_mouse_absolute(x, y)
-    return [{"moved_to": [x, y]}, _after_action_screenshot()]
+    return [{"moved_to": [x, y]}, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
-def move_to_window(address: str, anchor: str = "center", offset: list[int] | None = None) -> list:
+def move_to_window(address: str, anchor: str = "center", offset: list[int] | None = None, shot: str = "full") -> list:
     """Move the cursor to a point on a specific window (by hyprctl address); anchor: center/top-left/titlebar."""
     window = geometry.find_window(hyprctl.clients(), address)
     if window is None:
         raise ValueError(f"no window with address {address!r}")
     x, y = geometry.anchor_point(window, anchor, tuple(offset) if offset else (0, 0))
     ydinput.move_mouse_absolute(x, y)
-    return [{"moved_to": [x, y], "window": window.get("class")}, _after_action_screenshot()]
+    return [{"moved_to": [x, y], "window": window.get("class")}, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
-def click(button: str = "left", double: bool = False, x: int | None = None, y: int | None = None) -> list:
+def click(button: str = "left", double: bool = False, x: int | None = None, y: int | None = None, shot: str = "full") -> list:
     """Click a mouse button at the current cursor position, or move there first if x/y are given."""
     if x is not None and y is not None:
         ydinput.move_mouse_absolute(x, y)
     ydinput.click(button, double)
-    return [{"clicked": button, "double": double}, _after_action_screenshot()]
+    return [{"clicked": button, "double": double}, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
-def scroll(dx: int = 0, dy: int = 0) -> list:
+def scroll(dx: int = 0, dy: int = 0, shot: str = "full") -> list:
     """Scroll the mouse wheel by dx/dy steps."""
     ydinput.scroll(dx, dy)
-    return [{"scrolled": [dx, dy]}, _after_action_screenshot()]
+    return [{"scrolled": [dx, dy]}, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
-def type_text(text: str) -> list:
-    """Type a string of free text at the current focus."""
+def type_text(text: str, shot: str = "full", on_lock_screen: bool = False) -> list:
+    """Type a string of free text at the current focus. Any character on the active
+    keyboard layout works (accents, / : ; etc.). Refuses while the screen is locked
+    unless on_lock_screen=true. shot: "full" | "window" | "small" for the after-action screenshot."""
+    _ensure_keyboard_allowed(on_lock_screen)
     ydinput.type_text(text)
-    return [{"typed_chars": len(text)}, _after_action_screenshot()]
+    return [{"typed_chars": len(text)}, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
-def send_keys(keys: str) -> list:
-    """Send a key combination, e.g. "ctrl+shift+t" or "enter"."""
+def send_keys(keys: str, shot: str = "full", on_lock_screen: bool = False) -> list:
+    """Send a key combination, e.g. "ctrl+shift+t" or "enter". Refuses while the screen is
+    locked unless on_lock_screen=true."""
+    _ensure_keyboard_allowed(on_lock_screen)
     ydinput.send_keys(keys)
-    return [{"sent": keys}, _after_action_screenshot()]
+    return [{"sent": keys}, _after_action_screenshot(shot)]
+
+
+@mcp.tool()
+def wait_for(
+    window: str | None = None,
+    atspi_app: str | None = None,
+    atspi_name_contains: str | None = None,
+    region: list[int] | None = None,
+    timeout_s: float = 10,
+    interval_s: float = 0.5,
+    min_changed_fraction: float = 0.002,
+    shot: str = "full",
+) -> list:
+    """Poll until a condition holds instead of taking repeated screenshots. Give exactly one:
+    window (substring of a window's class or title), atspi_app + atspi_name_contains (an
+    element appears in a GTK/Qt app), or region [x, y, w, h] (at least min_changed_fraction of
+    its pixels change, so a blinking caret doesn't count).
+    Returns {found, elapsed_s} plus one final screenshot."""
+    given = [window is not None, atspi_app is not None, region is not None]
+    if sum(given) != 1:
+        raise ValueError("give exactly one of window, atspi_app, region")
+
+    def window_present() -> bool:
+        needle = window.lower()
+        return any(
+            needle in (c.get("class") or "").lower() or needle in (c.get("title") or "").lower()
+            for c in hyprctl.clients()
+        )
+
+    def atspi_present() -> bool:
+        try:
+            return bool(atspi.find(atspi_app, name_contains=atspi_name_contains or ""))
+        except atspi.AtspiError:
+            return False  # app not registered yet
+
+    if region is not None:
+        x, y, w, h = region
+        baseline = screenshot.capture_region_pixels(x, y, w, h)
+        # A blinking text caret alone changes a few dozen pixels; require a real change.
+        threshold = max(200, int(w * h * min_changed_fraction))
+
+        def region_changed() -> bool:
+            now = screenshot.capture_region_pixels(x, y, w, h)
+            changed = sum(1 for i in range(0, min(len(now), len(baseline)), 3) if now[i : i + 3] != baseline[i : i + 3])
+            return changed >= threshold
+
+        check = region_changed
+    else:
+        check = window_present if window is not None else atspi_present
+
+    start = time.monotonic()
+    found = check()
+    while not found and time.monotonic() - start < timeout_s:
+        time.sleep(interval_s)
+        found = check()
+    return [{"found": found, "elapsed_s": round(time.monotonic() - start, 2)}, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
@@ -145,6 +231,7 @@ def atspi_click(
     role: str | None = None,
     index: int = 0,
     via: str = "mouse",
+    shot: str = "full",
 ) -> list:
     """Find one element (same matching as atspi_find) and click it: via="mouse" (default)
     moves the real cursor to its screen center and clicks, like a human would; via="action"
@@ -165,7 +252,7 @@ def atspi_click(
             ok = atspi.do_action(conn, tuple(target["ref"]), 0)
         finally:
             conn.close()
-        return [{"clicked_via": "action", "target": target, "ok": ok}, _after_action_screenshot()]
+        return [{"clicked_via": "action", "target": target, "ok": ok}, _after_action_screenshot(shot)]
 
     if via != "mouse":
         raise ValueError(f"unknown via {via!r}, expected 'mouse' or 'action'")
@@ -174,7 +261,7 @@ def atspi_click(
     x, y = target["extents"]["center"]
     ydinput.move_mouse_absolute(x, y)
     ydinput.click("left", False)
-    return [{"clicked_via": "mouse", "target": target}, _after_action_screenshot()]
+    return [{"clicked_via": "mouse", "target": target}, _after_action_screenshot(shot)]
 
 
 # --- CDP: DOM-aware automation for Chromium-based browsers ----------------------------
@@ -204,19 +291,19 @@ def browser_find(
 
 
 @mcp.tool()
-def browser_click(mark: str, target_index: int = 0, port: int = cdp.DEFAULT_PORT) -> list:
+def browser_click(mark: str, target_index: int = 0, port: int = cdp.DEFAULT_PORT, shot: str = "full") -> list:
     """Click the element tagged `mark` by a prior browser_find call."""
     result = cdp.click_marked(mark, target_index=target_index, port=port)
-    return [result, _after_action_screenshot()]
+    return [result, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
-def browser_type(mark: str, text: str, target_index: int = 0, port: int = cdp.DEFAULT_PORT) -> list:
+def browser_type(mark: str, text: str, target_index: int = 0, port: int = cdp.DEFAULT_PORT, shot: str = "full") -> list:
     """Set an <input>/<textarea> (tagged `mark` by a prior browser_find) to `text`, dispatching
     the input/change events the page listens for. Use this instead of type_text for browser
     form fields — it goes through JS, not real keystrokes, so it can't hit keyboard-layout bugs."""
     result = cdp.type_marked(mark, text, target_index=target_index, port=port)
-    return [result, _after_action_screenshot()]
+    return [result, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
@@ -226,10 +313,10 @@ def browser_get_text(selector: str = "body", target_index: int = 0, port: int = 
 
 
 @mcp.tool()
-def browser_navigate(url: str, target_index: int = 0, port: int = cdp.DEFAULT_PORT) -> list:
+def browser_navigate(url: str, target_index: int = 0, port: int = cdp.DEFAULT_PORT, shot: str = "full") -> list:
     """Navigate a browser tab to `url` via CDP directly — no address-bar click/type needed."""
     cdp.navigate(url, target_index=target_index, port=port)
-    return [{"navigated_to": url}, _after_action_screenshot()]
+    return [{"navigated_to": url}, _after_action_screenshot(shot)]
 
 
 def main() -> None:

@@ -32,9 +32,28 @@ def capture_fullscreen() -> bytes:
     return _run()
 
 
+def capture_scaled(scale: float) -> bytes:
+    return _run("-s", str(scale))
+
+
 def capture_monitor(name: str) -> bytes:
     return _run("-o", name)
 
 
 def capture_region(x: int, y: int, w: int, h: int) -> bytes:
     return _run("-g", f"{x},{y} {w}x{h}")
+
+
+def capture_region_pixels(x: int, y: int, w: int, h: int) -> bytes:
+    """Raw RGB bytes of a region (grim's binary PPM minus its header) — for comparing
+    pixels without an image library."""
+    ppm = _run("-t", "ppm", "-g", f"{x},{y} {w}x{h}")
+    # Header "P6 W H 255" + exactly one whitespace byte; pixel bytes may themselves be
+    # whitespace values, so skip 4 tokens by hand instead of bytes.split().
+    pos = 0
+    for _ in range(4):
+        while ppm[pos : pos + 1].isspace():
+            pos += 1
+        while not ppm[pos : pos + 1].isspace():
+            pos += 1
+    return ppm[pos + 1 :]

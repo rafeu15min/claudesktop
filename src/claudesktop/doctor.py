@@ -9,6 +9,7 @@ import socket
 from pathlib import Path
 
 from . import atspi, hyprctl
+from .input import screen_locked
 
 
 def _ydotoold_reachable() -> bool:
@@ -50,4 +51,5 @@ def check_environment() -> dict:
         "hyprctl_ok": hyprctl_ok,
         "uinput_writable": uinput.exists() and os.access(uinput, os.W_OK),
         "atspi_bus_reachable": atspi_bus_ok,
+        "screen_locked": screen_locked(),
     }

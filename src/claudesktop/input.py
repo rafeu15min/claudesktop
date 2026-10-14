@@ -51,6 +51,11 @@ class InputError(RuntimeError):
     pass
 
 
+def screen_locked() -> bool:
+    """True while hyprlock is up — keystrokes would land in its password field."""
+    return subprocess.run(["pgrep", "-x", "hyprlock"], capture_output=True).returncode == 0
+
+
 def _run(*args: str) -> None:
     try:
         subprocess.run(["ydotool", *args], capture_output=True, timeout=5, check=True)
