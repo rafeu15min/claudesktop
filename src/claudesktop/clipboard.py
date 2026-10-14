@@ -4,8 +4,10 @@ clipboard, restoring whatever the user had copied afterwards.
 Used only as type_text's fallback for untypeable runs — everything typeable still goes
 through real keystrokes. Verified 2026-10-14: emoji/CJK pasted correctly in Vivaldi
 (ctrl+v) and Alacritty (ctrl+shift+v), and the user's clipboard came back byte-identical.
-No clipboard-history manager runs on this machine; if one is added later, pasted runs
-would show up in its history.
+
+This machine runs cliphist (`wl-paste --watch cliphist store`), which records every copy.
+Pasted runs go out with `wl-copy --sensitive`, which cliphist skips (verified 2026-10-14:
+a --sensitive copy never reached `cliphist list`, a plain one did).
 """
 
 from __future__ import annotations
@@ -37,7 +39,9 @@ def _run(args: list[str], data: bytes | None = None) -> bytes:
 def _copy(data: bytes | None, mime: str | None = None) -> None:
     """wl-copy forks a daemon that serves the clipboard and inherits our pipes, so its
     output must not be captured (subprocess would wait for that daemon to exit)."""
-    args = ["wl-copy", "--clear"] if data is None else ["wl-copy", "--type", mime or "text/plain;charset=utf-8"]
+    # --sensitive keeps clipboard-history managers (cliphist) from recording it; the restore
+    # below is sensitive too, so putting the user's own content back doesn't duplicate it.
+    args = ["wl-copy", "--clear"] if data is None else ["wl-copy", "--sensitive", "--type", mime or "text/plain;charset=utf-8"]
     try:
         subprocess.run(args, input=data, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=True)
     except FileNotFoundError as e:
