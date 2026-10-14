@@ -46,3 +46,6 @@
   keymap com libxkbcommon (ctypes, sem extensão compilada) e manda keycodes +
   Shift/AltGr via `ydotool key`. Forçar `kb_layout=us` no device virtual e o
   `wtype` foram descartados porque mexem no teclado físico do usuário.
+- **Gamepad desativado (2026-10-14)**: `gamepad.py` existe mas as ferramentas
+  não são registradas em `server.py`. Problemas desse módulo têm prioridade
+  mínima; só reativar se o usuário pedir.

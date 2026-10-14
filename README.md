@@ -39,8 +39,12 @@ Adicionado em 2026-10-14:
   digitar a senha). `check_environment` informa `screen_locked`.
 - **`audio_level`**: grava alguns segundos do que a saída padrão está tocando e
   informa pico/RMS em dBFS e quais apps têm stream de áudio. Só leitura.
-- **`gamepad_*`**: controle Xbox 360 virtual (python-evdev/uinput), reconhecido
-  pelo SDL com o mapeamento padrão. Conectar antes de abrir o jogo.
+- **`focus_window`**: foca uma janela por endereço ou por trecho de classe/título,
+  trocando de workspace se precisar (via `hl.dsp.focus`, a sintaxe Lua do
+  Hyprland 0.56).
+- **Gamepad (desativado)**: `gamepad.py` cria um controle Xbox 360 virtual
+  reconhecido pelo SDL, mas as ferramentas não são registradas no servidor por
+  decisão do usuário (sem uso por ora; prioridade mínima).
 
 ## Como funciona
 
