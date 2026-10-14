@@ -24,6 +24,24 @@ para esses casos, e pra jogos/conteúdo puramente visual, print+clique continua
 sendo o método real (não tem estrutura nenhuma pra consultar num canvas
 OpenGL/Vulkan).
 
+Adicionado em 2026-10-14:
+
+- **`type_text` funciona em qualquer layout.** O texto é traduzido em keycodes
+  para o layout que o Hyprland aplica ao device do ydotool (via libxkbcommon,
+  ver `keymap.py`), inclusive acentos por tecla morta. O layout do sistema nunca
+  é alterado.
+- **`shot`** em toda ferramenta que age: `"full"` (padrão), `"window"` (só a
+  janela ativa) ou `"small"` (tela cheia em meia escala).
+- **`wait_for`**: espera uma janela, um elemento AT-SPI ou uma mudança de pixels
+  numa região, em vez de vários prints seguidos.
+- **Tela bloqueada**: `type_text`/`send_keys` recusam enquanto o hyprlock está
+  ativo, a menos que `on_lock_screen=true` (para quando o usuário pede para
+  digitar a senha). `check_environment` informa `screen_locked`.
+- **`audio_level`**: grava alguns segundos do que a saída padrão está tocando e
+  informa pico/RMS em dBFS e quais apps têm stream de áudio. Só leitura.
+- **`gamepad_*`**: controle Xbox 360 virtual (python-evdev/uinput), reconhecido
+  pelo SDL com o mapeamento padrão. Conectar antes de abrir o jogo.
+
 ## Como funciona
 
 `ydotool` injeta eventos via `/dev/uinput` (um dispositivo de mouse/teclado
