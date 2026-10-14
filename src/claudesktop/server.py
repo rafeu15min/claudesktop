@@ -12,7 +12,7 @@ from mcp.server.mcpserver import Image, MCPServer
 
 import time
 
-from . import atspi, audio, cdp, geometry, hyprctl, screenshot
+from . import atspi, audio, cdp, geometry, hyprctl, ocr, screenshot
 from . import input as ydinput
 from .doctor import check_environment as _check_environment
 
@@ -118,13 +118,18 @@ def scroll(dx: int = 0, dy: int = 0, shot: str = "full") -> list:
 
 
 @mcp.tool()
-def type_text(text: str, shot: str = "full", on_lock_screen: bool = False) -> list:
-    """Type a string of free text at the current focus. Any character on the active
-    keyboard layout works (accents, / : ; etc.). Refuses while the screen is locked
-    unless on_lock_screen=true. shot: "full" | "window" | "small" for the after-action screenshot."""
+def type_text(
+    text: str, shot: str = "full", on_lock_screen: bool = False, key_delay_ms: int = ydinput.DEFAULT_KEY_DELAY_MS
+) -> list:
+    """Type a string of free text at the current focus. Everything the active keyboard layout
+    can produce (accents, / : ; etc.) is typed as real keystrokes; anything else (emoji, CJK...)
+    is pasted via the clipboard, which is restored afterwards. key_delay_ms (default 3) is the
+    gap between key events — raise it (~20-30) for games that read input once per frame.
+    Refuses while the screen is locked unless on_lock_screen=true. shot: "full" | "window" |
+    "small" for the after-action screenshot."""
     _ensure_keyboard_allowed(on_lock_screen)
-    ydinput.type_text(text)
-    return [{"typed_chars": len(text)}, _after_action_screenshot(shot)]
+    result = ydinput.type_text(text, key_delay_ms)
+    return [{"typed_chars": len(text), **result}, _after_action_screenshot(shot)]
 
 
 @mcp.tool()
@@ -190,6 +195,38 @@ def wait_for(
         time.sleep(interval_s)
         found = check()
     return [{"found": found, "elapsed_s": round(time.monotonic() - start, 2)}, _after_action_screenshot(shot)]
+
+
+@mcp.tool()
+def read_text(
+    address: str | None = None,
+    match: str | None = None,
+    region: list[int] | None = None,
+    lang: str = "por+eng",
+    min_conf: float = 40,
+) -> dict:
+    """OCR the text on screen — for terminals, games and anything without an AT-SPI/DOM tree.
+    Target: a window by `address` or `match` (class/title substring), a `region` [x, y, w, h],
+    or the active window if none given. Returns `text` (by line) and `words`, each with a
+    screen `center` you can pass to `click`. Good for words and labels; loose symbol strings
+    are unreliable. Read-only."""
+    if sum(v is not None for v in (address, match, region)) > 1:
+        raise ValueError("give at most one of address, match, region")
+    if region is not None:
+        x, y, w, h = region
+    else:
+        if match is not None:
+            win = hyprctl.find_client(match)
+        elif address is not None:
+            win = geometry.find_window(hyprctl.clients(), address)
+            if win is None:
+                raise ValueError(f"no window with address {address!r}")
+        else:
+            win = hyprctl.active_window()
+            if win is None:
+                raise ValueError("no active window; pass a region")
+        (x, y), (w, h) = win["at"], win["size"]
+    return ocr.read(x, y, w, h, lang=lang, min_conf=min_conf)
 
 
 @mcp.tool()

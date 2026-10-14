@@ -184,31 +184,38 @@ def _build(layout: str, variant: str) -> tuple[dict[str, Stroke], dict[str, Stro
     return direct, dead
 
 
-def strokes_for(text: str, layout: str | None = None, variant: str = "") -> list[Stroke]:
-    """Key strokes that type `text` on the active layout. Raises KeymapError
-    listing every character that can't be produced."""
+Segment = tuple[str, "list[Stroke] | str"]  # ("keys", strokes) or ("paste", text)
+
+
+def segments(text: str, layout: str | None = None, variant: str = "") -> list[Segment]:
+    """Split `text` into runs: ("keys", strokes) for what the active layout can type, and
+    ("paste", text) for runs it can't (emoji, CJK...). Consecutive untypeable code points
+    stay in one run, so multi-code-point emoji (ZWJ sequences, skin tones) aren't split."""
     if layout is None:
         layout, variant = active_layout()
     direct, dead = _build(layout, variant)
     by_mark = {mark: dead[name] for name, (mark, _) in _DEAD_KEYS.items() if name in dead}
     by_spacing = {spacing: dead[name] for name, (_, spacing) in _DEAD_KEYS.items() if name in dead}
 
-    out: list[Stroke] = []
-    missing: list[str] = []
+    out: list[Segment] = []
+
+    def add(kind: str, item) -> None:
+        if out and out[-1][0] == kind:
+            out[-1] = (kind, out[-1][1] + item)
+        else:
+            out.append((kind, item))
+
     for char in text:
         if char in direct:
-            out.append(direct[char])
+            add("keys", [direct[char]])
             continue
         if char in by_spacing and " " in direct:
-            out += [by_spacing[char], direct[" "]]  # dead key + space -> the bare accent
+            add("keys", [by_spacing[char], direct[" "]])  # dead key + space -> the bare accent
             continue
         decomposed = unicodedata.normalize("NFD", char)
         base, marks = decomposed[0], decomposed[1:]
         if len(marks) == 1 and base in direct and marks in by_mark:
-            out += [by_mark[marks], direct[base]]
+            add("keys", [by_mark[marks], direct[base]])
             continue
-        missing.append(char)
-    if missing:
-        unique = "".join(dict.fromkeys(missing))
-        raise KeymapError(f"characters not typeable on layout {layout!r}: {unique!r}")
+        add("paste", char)
     return out

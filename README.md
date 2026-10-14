@@ -29,7 +29,13 @@ Adicionado em 2026-10-14:
 - **`type_text` funciona em qualquer layout.** O texto é traduzido em keycodes
   para o layout que o Hyprland aplica ao device do ydotool (via libxkbcommon,
   ver `keymap.py`), inclusive acentos por tecla morta. O layout do sistema nunca
-  é alterado.
+  é alterado. O que o layout não produz (emoji, CJK) é colado pela área de
+  transferência (Ctrl+V, ou Ctrl+Shift+V em terminais), que é restaurada logo
+  depois. Atraso padrão de 3 ms entre teclas (~110 caracteres/s);
+  `key_delay_ms` maior para jogos.
+- **`read_text`**: OCR (Tesseract, `por+eng`, captura em 2×) de uma janela ou
+  região, com a coordenada de tela de cada palavra para usar no `click`. Precisa
+  de `tesseract tesseract-data-por tesseract-data-eng`.
 - **`shot`** em toda ferramenta que age: `"full"` (padrão), `"window"` (só a
   janela ativa) ou `"small"` (tela cheia em meia escala).
 - **`wait_for`**: espera uma janela, um elemento AT-SPI ou uma mudança de pixels
@@ -160,7 +166,9 @@ rodando):
 - `browser_navigate(url, target_index=0, port=9222)`
 
 Fora do escopo do v1 (não construído especulativamente): drag-and-drop,
-multi-touch, clipboard, mover/fechar janelas, OCR, captura contínua/vídeo, e a
+multi-touch, leitura/escrita livre da área de transferência (só a colagem de
+fallback do `type_text`), mover/fechar janelas (focar existe), captura
+contínua/vídeo, e a
 captura de debugging de teclado físico descrita no plano original (recurso
 maior e sensível — ver plano antes de implementar).
 

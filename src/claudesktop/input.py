@@ -21,7 +21,7 @@ from __future__ import annotations
 import subprocess
 import time
 
-from . import keymap
+from . import clipboard, keymap
 
 BUTTON_CODES = {"left": 0x00, "right": 0x01, "middle": 0x02}
 
@@ -56,9 +56,9 @@ def screen_locked() -> bool:
     return subprocess.run(["pgrep", "-x", "hyprlock"], capture_output=True).returncode == 0
 
 
-def _run(*args: str) -> None:
+def _run(*args: str, timeout: float = 5) -> None:
     try:
-        subprocess.run(["ydotool", *args], capture_output=True, timeout=5, check=True)
+        subprocess.run(["ydotool", *args], capture_output=True, timeout=timeout, check=True)
     except FileNotFoundError as e:
         raise InputError("ydotool not found on PATH") from e
     except subprocess.CalledProcessError as e:
@@ -86,19 +86,40 @@ def scroll(dx: int = 0, dy: int = 0) -> None:
     _run("mousemove", "--wheel", "-x", str(dx), "-y", str(dy))
 
 
-def type_text(text: str) -> None:
-    """Types via raw keycodes resolved against the layout Hyprland applies to the
-    virtual device (see keymap.py) — not `ydotool type`, which assumes US and
-    turned `/ : ;` into other symbols on ABNT2."""
+# 3ms between key events typed 300 tricky chars exactly in both Vivaldi and Alacritty
+# (even 1ms did, measured 2026-10-14) — ~110 chars/s vs ~28 at ydotool's 12ms default.
+# Games that poll input once per frame can miss events this short: raise it for them.
+DEFAULT_KEY_DELAY_MS = 3
+
+
+def _send_strokes(strokes: list, key_delay_ms: int) -> None:
+    def flush(events: list[str]) -> None:
+        _run("key", "-d", str(key_delay_ms), *events, timeout=5 + len(events) * key_delay_ms / 1000)
+
     chunk: list[str] = []
-    for code, mods in keymap.strokes_for(text):
+    for code, mods in strokes:
         chunk += [f"{m}:1" for m in mods] + [f"{code}:1", f"{code}:0"] + [f"{m}:0" for m in reversed(mods)]
         # Split only between strokes (all keys released) so argv stays bounded on long text.
-        if len(chunk) >= 200:  # ~12ms per event in ydotool -> well under _run's 5s timeout
-            _run("key", *chunk)
+        if len(chunk) >= 200:
+            flush(chunk)
             chunk = []
     if chunk:
-        _run("key", *chunk)
+        flush(chunk)
+
+
+def type_text(text: str, key_delay_ms: int = DEFAULT_KEY_DELAY_MS) -> dict:
+    """Types via raw keycodes resolved against the layout Hyprland applies to the
+    virtual device (see keymap.py) — not `ydotool type`, which assumes US and
+    turned `/ : ;` into other symbols on ABNT2. Runs the layout can't produce
+    (emoji, CJK...) are pasted via the clipboard, which is restored afterwards."""
+    pasted = 0
+    for kind, item in keymap.segments(text):
+        if kind == "keys":
+            _send_strokes(item, key_delay_ms)
+        else:
+            clipboard.paste_text(item, send_keys)
+            pasted += len(item)
+    return {"pasted_chars": pasted}
 
 
 def send_keys(combo: str) -> None:

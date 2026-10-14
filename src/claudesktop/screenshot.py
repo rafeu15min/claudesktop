@@ -44,6 +44,10 @@ def capture_region(x: int, y: int, w: int, h: int) -> bytes:
     return _run("-g", f"{x},{y} {w}x{h}")
 
 
+def capture_region_scaled(x: int, y: int, w: int, h: int, scale: float) -> bytes:
+    return _run("-s", str(scale), "-g", f"{x},{y} {w}x{h}")
+
+
 def capture_region_pixels(x: int, y: int, w: int, h: int) -> bytes:
     """Raw RGB bytes of a region (grim's binary PPM minus its header) — for comparing
     pixels without an image library."""
