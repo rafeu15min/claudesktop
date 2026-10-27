@@ -10,13 +10,36 @@ from __future__ import annotations
 
 from mcp.server.mcpserver import Image, MCPServer
 
+import functools
 import time
 
 from . import atspi, audio, cdp, geometry, hyprctl, ocr, screenshot
 from . import input as ydinput
 from .doctor import check_environment as _check_environment
+from .env import ensure_session_env
 
-mcp = MCPServer("claudesktop")
+
+class _SessionAwareServer(MCPServer):
+    """Re-resolves the Wayland/Hyprland/D-Bus env before every tool call, so a server
+    spawned before the compositor was up (systemd-started hosts like Hermes) recovers
+    on its own instead of failing every call until restarted. See env.py."""
+
+    def tool(self, *args, **kwargs):
+        register = super().tool(*args, **kwargs)
+
+        def decorator(fn):
+            @functools.wraps(fn)  # keeps the signature the SDK reads for the tool schema
+            def wrapped(*a, **kw):
+                ensure_session_env()
+                return fn(*a, **kw)
+
+            register(wrapped)
+            return fn
+
+        return decorator
+
+
+mcp = _SessionAwareServer("claudesktop")
 
 
 def _after_action_screenshot(shot: str = "full") -> Image:
